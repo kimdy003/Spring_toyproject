@@ -1,0 +1,21 @@
+spring:
+  output.ansi.enabled: ALWAYS  # 터미널에서 색깔 표시
+
+  datasource:
+    driver-class-name: org.h2.Driver
+    url : jdbc:h2:tcp://localhost/~/nb
+    username: sa
+    password:
+
+  jpa:
+    properties:
+      hibernate:
+        format_sql : true  # SQL 가독성 좋게 만들기
+        user_sql_comments: true  # 실행되는 JPQL 확인
+
+    hibernate:
+      ddl-auto: create
+
+logging.level:
+  org.hibernate.SQL: debug  # SQL 로그로 보기
+  org.apache.coyote.http11: debug  # Http 요청정보 로그 남기기
