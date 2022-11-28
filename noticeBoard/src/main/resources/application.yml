@@ -16,6 +16,9 @@ spring:
     hibernate:
       ddl-auto: create
 
+  profiles:
+    include: jwt  # application-jwt에 해당하는 yml 파일을 읽을 수 있다.
+
 logging.level:
   org.hibernate.SQL: debug  # SQL 로그로 보기
   org.apache.coyote.http11: debug  # Http 요청정보 로그 남기기
