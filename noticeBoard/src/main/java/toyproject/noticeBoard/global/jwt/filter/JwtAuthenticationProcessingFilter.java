@@ -1,0 +1,89 @@
+package toyproject.noticeBoard.global.jwt.filter;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.mapping.GrantedAuthoritiesMapper;
+import org.springframework.security.core.authority.mapping.NullAuthoritiesMapper;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.web.filter.OncePerRequestFilter;
+import toyproject.noticeBoard.domain.member.Member;
+import toyproject.noticeBoard.domain.member.repository.MemberRepository;
+import toyproject.noticeBoard.global.jwt.service.JwtService;
+
+import javax.servlet.FilterChain;
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
+
+@RequiredArgsConstructor
+public class JwtAuthenticationProcessingFilter extends OncePerRequestFilter {
+
+    private final JwtService jwtService;
+    private final MemberRepository memberRepository;
+
+    private GrantedAuthoritiesMapper authoritiesMapper = new NullAuthoritiesMapper();  // 5
+
+    private final String NO_CHECK_URL = "/login";  // 1
+
+    /**
+     * 1. 리프레시 토큰이 오는 경우 -> 유효하면 AccessToken 재발급후, 필터 진행 X, 바로 튕기기
+     *
+     * 2. 리프레시 토큰이 없고, AccessToken 만 있는 경우 -> 유저정보 저장후 필터 계속 진행
+     */
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
+        if (request.getRequestURI().equals(NO_CHECK_URL)) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        String refreshToken = jwtService.extractRefreshToken(request)
+                .filter(jwtService::isTokenValid)  // 메소드 참조
+                .orElse(null);
+
+        if (refreshToken != null) {
+            checkRefreshTokenAndReissueAccessToken(response, refreshToken);  // 3
+            return;
+        }
+
+        checkAccessTokenAndAuthentication(request, response, filterChain);  // 4
+    }
+
+    private void checkAccessTokenAndAuthentication(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
+        jwtService.extractAccessToken(request).filter(jwtService::isTokenValid).ifPresent(
+                accessToken -> jwtService.extractUsername(accessToken).ifPresent(
+                        username -> memberRepository.findByUsername(username).ifPresent(
+                                this::saveAuthentication
+                        )
+                )
+        );
+
+        filterChain.doFilter(request, response);
+    }
+
+    private void saveAuthentication(Member member) {
+        UserDetails user = User.builder()
+                .username(member.getUsername())
+                .password(member.getPassword())
+                .roles(member.getRole().name())
+                .build();
+
+        Authentication authentication = new UsernamePasswordAuthenticationToken(user, null, authoritiesMapper.mapAuthorities(user.getAuthorities()));
+
+        SecurityContext context = SecurityContextHolder.createEmptyContext();  // 5
+        context.setAuthentication(authentication);
+        SecurityContextHolder.setContext(context);
+    }
+
+    private void checkRefreshTokenAndReissueAccessToken(HttpServletResponse response, String refreshToken) {
+        memberRepository.findByRefreshToken(refreshToken).ifPresent(
+                member -> jwtService.sendAccessToken(response, jwtService.createAccessToken(member.getUsername()))
+        );
+    }
+}
