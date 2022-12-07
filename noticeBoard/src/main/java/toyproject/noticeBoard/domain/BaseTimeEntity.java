@@ -1,4 +1,4 @@
-package toyproject.noticeBoard.domain.common;
+package toyproject.noticeBoard.domain;
 
 import lombok.Getter;
 import org.springframework.data.annotation.CreatedDate;
